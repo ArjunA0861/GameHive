@@ -5,17 +5,17 @@
   --bg-dark: #050507;
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
-  
+
   --primary: #7c3aed;
   --primary-glow: rgba(124, 58, 237, 0.5);
   --secondary: #db2777;
-  
+
   --text-main: #ffffff;
   --text-muted: #9ca3af;
-  
+
   --font-heading: 'Outfit', sans-serif;
   --font-body: 'Inter', sans-serif;
-  
+
   --gradient-main: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
 }
 
@@ -34,7 +34,12 @@ body {
   overflow-x: hidden;
 }
 
-h1, h2, h3, h4, b, strong {
+h1,
+h2,
+h3,
+h4,
+b,
+strong {
   font-family: var(--font-heading);
 }
 
@@ -84,4 +89,45 @@ button {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
+}
+
+/* Card Overlays */
+.game-card:hover .card-overlay {
+  opacity: 1 !important;
+}
+
+.icon-btn {
+  background: rgba(255, 255, 255, 0.2);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: 0.2s;
+  cursor: pointer;
+  border: none;
+}
+
+.icon-btn:hover {
+  background: var(--primary);
+}
+
+/* Horizontal Scrollbar Styling */
+.horizontal-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.horizontal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.horizontal-scroll::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.horizontal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }

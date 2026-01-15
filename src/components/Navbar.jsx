@@ -1,5 +1,6 @@
 import React from 'react';
 import { Gamepad2, LogOut } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Navbar({ user, onSignIn, onSignOut }) {
     return (
@@ -16,12 +17,12 @@ export default function Navbar({ user, onSignIn, onSignOut }) {
             justifyContent: 'space-between',
             alignItems: 'center'
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'inherit' }}>
                 <Gamepad2 color="#7c3aed" size={32} />
                 <span style={{ fontSize: '1.5rem', fontWeight: '800', fontFamily: 'var(--font-heading)' }}>
                     Game<span className="text-gradient">Hive</span>
                 </span>
-            </div>
+            </Link>
 
             <div>
                 {user ? (

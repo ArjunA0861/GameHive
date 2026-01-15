@@ -1,5 +1,6 @@
 import React from 'react';
-import { Users, Trophy, BarChart3, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Users, Compass, BarChart3, ChevronRight } from 'lucide-react';
 import backgroundVideo from '../assets/InShot_20251219_110914805.mp4';
 
 export default function LandingPage({ user, onSignIn }) {
@@ -49,8 +50,7 @@ export default function LandingPage({ user, onSignIn }) {
                         <span className="text-gradient">Gaming Destination</span>
                     </h1>
                     <p style={{ fontSize: '1.25rem', color: 'var(--text-muted)', marginBottom: '2.5rem', maxWidth: '600px', marginInline: 'auto' }}>
-                        Connect with gamers, track your stats, and compete in tournaments.
-                        The next generation of gaming communities starts here.
+                        Discover games, share opinions, and build your personal gaming universe.Where players explore, rate, and talk games together.
                     </p>
 
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -59,16 +59,17 @@ export default function LandingPage({ user, onSignIn }) {
                                 Join Now <ChevronRight size={20} />
                             </button>
                         )}
-                        <button style={{
+                        <Link to="/browse" style={{
                             padding: '0.75rem 1.5rem',
                             background: 'rgba(255,255,255,0.05)',
                             border: '1px solid rgba(255,255,255,0.1)',
                             borderRadius: '99px',
                             color: 'white',
-                            fontWeight: '600'
+                            fontWeight: '600',
+                            display: 'inline-block'
                         }}>
-                            Explore Games
-                        </button>
+                            Enter The Hive
+                        </Link>
                     </div>
                 </section>
 
@@ -85,9 +86,9 @@ export default function LandingPage({ user, onSignIn }) {
                             desc="Find teammates and build your squad with our advanced matching system."
                         />
                         <FeatureCard
-                            icon={<Trophy color="#db2777" size={32} />}
-                            title="Compete"
-                            desc="Join automated tournaments and climb the global leaderboards."
+                            icon={<Compass color="#db2777" size={32} />}
+                            title="Explore"
+                            desc="Discover new games, genres, reviews, and player-curated lists."
                         />
                         <FeatureCard
                             icon={<BarChart3 color="#3b82f6" size={32} />}

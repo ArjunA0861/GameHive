@@ -2,6 +2,10 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import LandingPage from "./pages/LandingPage";
+import Browse from "./pages/Browse";
+
+import GameDetails from "./pages/GameDetails";
+import Search from "./pages/Search";
 
 // firebase
 import { auth } from "./firebase/config";
@@ -49,6 +53,9 @@ function App() {
           <Route path="/" element={
             <LandingPage user={user} onSignIn={handleGoogleSignIn} />
           } />
+          <Route path="/browse" element={<Browse />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/game/:id" element={<GameDetails />} />
           {/* Add more routes here later */}
         </Routes>
       </div>
