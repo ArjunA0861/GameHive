@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Star, Plus, Play, Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { isSafeGame } from '../utils/filters';
 
 const API_KEY = import.meta.env.VITE_RAWG_API_KEY;
+
+
 
 export default function Browse() {
     const navigate = useNavigate();
@@ -19,17 +22,19 @@ export default function Browse() {
 
     useEffect(() => {
         // Fetch General Games (Trending sort)
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&page_size=50&ordering=-added`)
+        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&page_size=60&ordering=-added`)
             .then(res => res.json())
             .then(data => {
-                const mappedGames = data.results.map(g => ({
-                    id: g.id,
-                    title: g.name,
-                    year: g.released ? g.released.substring(0, 4) : 'N/A',
-                    rating: g.rating,
-                    image: g.background_image,
-                    genres: g.genres ? g.genres.map(gen => gen.name) : []
-                }));
+                const mappedGames = data.results
+                    .filter(isSafeGame)
+                    .map(g => ({
+                        id: g.id,
+                        title: g.name,
+                        year: g.released ? g.released.substring(0, 4) : 'N/A',
+                        rating: g.rating,
+                        image: g.background_image,
+                        genres: g.genres ? g.genres.map(gen => gen.name) : []
+                    }));
                 setGames(mappedGames);
                 setLoading(false);
             })
@@ -44,18 +49,21 @@ export default function Browse() {
         twoMonthsAgo.setMonth(today.getMonth() - 2);
         const recentDates = `${getDateString(twoMonthsAgo)},${getDateString(today)}`;
 
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&dates=${recentDates}&ordering=-released&page_size=12`)
+        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&dates=${recentDates}&ordering=-released&page_size=20`)
             .then(res => res.json())
             .then(data => {
                 if (data.results) {
-                    const mappedRecent = data.results.map(g => ({
-                        id: g.id,
-                        title: g.name,
-                        year: g.released ? g.released.substring(0, 4) : 'N/A',
-                        rating: g.rating,
-                        image: g.background_image,
-                        genres: g.genres ? g.genres.map(gen => gen.name) : []
-                    }));
+                    const mappedRecent = data.results
+                        .filter(isSafeGame)
+                        .slice(0, 12)
+                        .map(g => ({
+                            id: g.id,
+                            title: g.name,
+                            year: g.released ? g.released.substring(0, 4) : 'N/A',
+                            rating: g.rating,
+                            image: g.background_image,
+                            genres: g.genres ? g.genres.map(gen => gen.name) : []
+                        }));
                     setRecentGames(mappedRecent);
                 }
             })
@@ -66,36 +74,42 @@ export default function Browse() {
         nextSixMonths.setMonth(today.getMonth() + 6);
         const upcomingDates = `${getDateString(today)},${getDateString(nextSixMonths)}`;
 
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&dates=${upcomingDates}&ordering=-added&page_size=12`)
+        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&dates=${upcomingDates}&ordering=-added&page_size=20`)
             .then(res => res.json())
             .then(data => {
                 if (data.results) {
-                    const mappedUpcoming = data.results.map(g => ({
-                        id: g.id,
-                        title: g.name,
-                        year: g.released ? g.released.substring(0, 4) : 'N/A',
-                        rating: g.rating,
-                        image: g.background_image,
-                        genres: g.genres ? g.genres.map(gen => gen.name) : []
-                    }));
+                    const mappedUpcoming = data.results
+                        .filter(isSafeGame)
+                        .slice(0, 12)
+                        .map(g => ({
+                            id: g.id,
+                            title: g.name,
+                            year: g.released ? g.released.substring(0, 4) : 'N/A',
+                            rating: g.rating,
+                            image: g.background_image,
+                            genres: g.genres ? g.genres.map(gen => gen.name) : []
+                        }));
                     setUpcomingGames(mappedUpcoming);
                 }
             })
             .catch(err => console.error("Error fetching upcoming games:", err));
 
         // Fetch Top Rated (Metacritic)
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&page_size=24&ordering=-metacritic`)
+        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&page_size=40&ordering=-metacritic`)
             .then(res => res.json())
             .then(data => {
                 if (data.results) {
-                    const mappedTop = data.results.map(g => ({
-                        id: g.id,
-                        title: g.name,
-                        year: g.released ? g.released.substring(0, 4) : 'N/A',
-                        rating: g.rating,
-                        image: g.background_image,
-                        genres: g.genres ? g.genres.map(gen => gen.name) : []
-                    }));
+                    const mappedTop = data.results
+                        .filter(isSafeGame)
+                        .slice(0, 24)
+                        .map(g => ({
+                            id: g.id,
+                            title: g.name,
+                            year: g.released ? g.released.substring(0, 4) : 'N/A',
+                            rating: g.rating,
+                            image: g.background_image,
+                            genres: g.genres ? g.genres.map(gen => gen.name) : []
+                        }));
                     setTopRatedGames(mappedTop);
                 }
             })

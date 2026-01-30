@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { Search as SearchIcon, Star, Plus, Filter, Loader2 } from 'lucide-react';
+import { isSafeGame } from '../utils/filters';
 
 const API_KEY = import.meta.env.VITE_RAWG_API_KEY;
 
@@ -64,7 +65,8 @@ export default function Search() {
 
         try {
             const searchQuery = searchParams.get('query') || '';
-            let url = `https://api.rawg.io/api/games?key=${API_KEY}&page=${currentPage}&page_size=12`;
+            // Fetch more items to allow for filtering
+            let url = `https://api.rawg.io/api/games?key=${API_KEY}&page=${currentPage}&page_size=20`;
 
             if (searchQuery) url += `&search=${searchQuery}`;
             if (activeGenre) url += `&genres=${activeGenre}`;
@@ -75,13 +77,21 @@ export default function Search() {
             if (data.results.length === 0) {
                 setHasMore(false);
             } else {
-                const mappedGames = data.results.map(g => ({
-                    id: g.id,
-                    title: g.name,
-                    year: g.released ? g.released.substring(0, 4) : 'N/A',
-                    rating: g.rating,
-                    image: g.background_image,
-                }));
+                const mappedGames = data.results
+                    .filter(isSafeGame)
+                    .map(g => ({
+                        id: g.id,
+                        title: g.name,
+                        year: g.released ? g.released.substring(0, 4) : 'N/A',
+                        rating: g.rating,
+                        image: g.background_image,
+                        genres: g.genres || [],
+                        tags: g.tags || [],
+                        esrb_rating: g.esrb_rating
+                    }));
+
+                // If filtering removed all items but there are more pages, we might need to fetch again (simplified here: just showing what we got)
+                // In a robust implementation, we would recursively fetch if the list is empty after filtering.
 
                 setGames(prev => isNewSearch ? mappedGames : [...prev, ...mappedGames]);
             }
@@ -129,29 +139,34 @@ export default function Search() {
                     />
                 </form>
 
-                {/* Genres */}
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '2rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', marginRight: '10px' }}>
-                        <Filter size={18} /> Filters:
+                {/* Filters Row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', marginBottom: '2rem' }}>
+
+                    {/* Genres */}
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', marginRight: '10px' }}>
+                            <Filter size={18} /> Filters:
+                        </div>
+                        {GENRES.map(g => (
+                            <button
+                                key={g.id}
+                                onClick={() => setActiveGenre(activeGenre === g.id ? null : g.id)}
+                                style={{
+                                    background: activeGenre === g.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                                    color: activeGenre === g.id ? 'white' : 'var(--text-muted)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    padding: '8px 16px',
+                                    borderRadius: '20px',
+                                    fontSize: '0.9rem',
+                                    cursor: 'pointer',
+                                    transition: '0.2s',
+                                    display: 'block'
+                                }}
+                            >
+                                {g.name}
+                            </button>
+                        ))}
                     </div>
-                    {GENRES.map(g => (
-                        <button
-                            key={g.id}
-                            onClick={() => setActiveGenre(activeGenre === g.id ? null : g.id)}
-                            style={{
-                                background: activeGenre === g.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
-                                color: activeGenre === g.id ? 'white' : 'var(--text-muted)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                padding: '8px 16px',
-                                borderRadius: '20px',
-                                fontSize: '0.9rem',
-                                cursor: 'pointer',
-                                transition: '0.2s'
-                            }}
-                        >
-                            {g.name}
-                        </button>
-                    ))}
                 </div>
             </div>
 

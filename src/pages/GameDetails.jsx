@@ -1,6 +1,9 @@
 import { useParams, Link } from 'react-router-dom';
-import { Star, Plus, Pencil, Play, ArrowLeft } from 'lucide-react';
+import { Star, Plus, Pencil, Play, ArrowLeft, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { db, auth } from '../firebase/config';
+import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, deleteDoc, doc } from 'firebase/firestore';
+import useUserRole from '../hooks/useUserRole';
 
 const API_KEY = import.meta.env.VITE_RAWG_API_KEY;
 
@@ -8,8 +11,16 @@ export default function GameDetails() {
     const { id } = useParams();
     const [game, setGame] = useState(null);
     const [loading, setLoading] = useState(true);
+    const { role } = useUserRole();
+
+    // Reviews State
+    const [reviews, setReviews] = useState([]);
+    const [newReview, setNewReview] = useState('');
+    const [rating, setRating] = useState(5);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
+        // Fetch Game Details
         fetch(`https://api.rawg.io/api/games/${id}?key=${API_KEY}`)
             .then(res => res.json())
             .then(data => {
@@ -29,7 +40,78 @@ export default function GameDetails() {
                 console.error(err);
                 setLoading(false);
             });
+
+        // Fetch Reviews
+        fetchReviews();
     }, [id]);
+
+    const fetchReviews = async () => {
+        try {
+            const q = query(
+                collection(db, "reviews"),
+                where("gameId", "==", Number(id)),
+                orderBy("createdAt", "desc")
+            );
+            const querySnapshot = await getDocs(q);
+            const loadedReviews = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setReviews(loadedReviews);
+        } catch (error) {
+            console.error("Error fetching reviews:", error);
+        }
+    };
+
+    const handleDelete = async (reviewId) => {
+        const confirmDelete = window.confirm("Delete this review?");
+        if (!confirmDelete) return;
+
+        try {
+            console.log("Deleting review:", reviewId);
+            if (!reviewId) throw new Error("Review ID is missing");
+            await deleteDoc(doc(db, "reviews", reviewId));
+            alert("Review deleted");
+            // Optimistically remove from UI
+            setReviews(reviews.filter(r => r.id !== reviewId));
+        } catch (err) {
+            console.error("Delete failed:", err);
+            alert(`Failed to delete review: ${err.message}`);
+        }
+    };
+
+    const handleSubmitReview = async (e) => {
+        e.preventDefault();
+        if (!newReview.trim()) return;
+
+        if (!auth.currentUser) {
+            alert("Please sign in to post a review");
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await addDoc(collection(db, "reviews"), {
+                gameId: Number(id),
+                gameTitle: game.title,
+                rating: Number(rating),
+                review: newReview,
+                userId: auth.currentUser.uid,
+                userName: auth.currentUser.displayName || "Anonymous",
+                userPhoto: auth.currentUser.photoURL,
+                gameCover: game.image, // Save game cover for profile display
+                createdAt: Timestamp.now()
+            });
+
+            setNewReview('');
+            setRating(5);
+            fetchReviews(); // Refresh list
+        } catch (error) {
+            console.error("Error adding review:", error);
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -126,7 +208,7 @@ export default function GameDetails() {
                             <ActionButton icon={<Plus size={20} />} label="Add to Library" active />
                         </div>
 
-                        <div className="glass-card" style={{ padding: '2rem' }}>
+                        <div className="glass-card" style={{ padding: '2rem', marginBottom: '3rem' }}>
                             <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--text-muted)' }}>Synposis</h3>
                             <p style={{ fontSize: '1.1rem', lineHeight: '1.8' }}>
                                 {game.description}
@@ -144,6 +226,103 @@ export default function GameDetails() {
                                         {p}
                                     </span>
                                 ))}
+                            </div>
+                        </div>
+
+                        {/* Reviews Section */}
+                        <div style={{ marginBottom: '4rem' }}>
+                            <h2 style={{ fontSize: '2rem', marginBottom: '1.5rem' }}>Reviews</h2>
+
+                            {/* Add Review Form */}
+                            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+                                <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Write a Review</h3>
+                                <form onSubmit={handleSubmitReview}>
+                                    <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <span>Rating:</span>
+                                        <div style={{ display: 'flex', gap: '5px' }}>
+                                            {[1, 2, 3, 4, 5].map(star => (
+                                                <Star
+                                                    key={star}
+                                                    size={24}
+                                                    style={{ cursor: 'pointer' }}
+                                                    fill={star <= rating ? "#fbbf24" : "none"}
+                                                    color={star <= rating ? "#fbbf24" : "var(--text-muted)"}
+                                                    onClick={() => setRating(star)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <textarea
+                                        value={newReview}
+                                        onChange={e => setNewReview(e.target.value)}
+                                        placeholder="Share your thoughts..."
+                                        style={{
+                                            width: '100%',
+                                            minHeight: '100px',
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '8px',
+                                            padding: '1rem',
+                                            color: 'white',
+                                            marginBottom: '1rem',
+                                            fontSize: '1rem',
+                                            fontFamily: 'inherit'
+                                        }}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="btn-primary"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px' }}
+                                    >
+                                        <Send size={18} /> {submitting ? 'Posting...' : 'Post Review'}
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* Reviews List */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {reviews.length === 0 ? (
+                                    <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No reviews yet. Be the first to review!</p>
+                                ) : (
+                                    reviews.map(review => (
+                                        <div key={review.id} className="glass-card" style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.03)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                                    <Link to={`/profile/${review.userId}`} style={{ color: 'inherit', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration = 'underline'} onMouseLeave={e => e.target.style.textDecoration = 'none'}>
+                                                        {review.userName}
+                                                    </Link>
+                                                </span>
+                                                <div style={{ display: 'flex', gap: '2px' }}>
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <Star key={i} size={14} fill={i < review.rating ? "#fbbf24" : "none"} color={i < review.rating ? "#fbbf24" : "gray"} />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <p style={{ color: 'var(--text-main)', lineHeight: '1.6' }}>{review.review}</p>
+                                            <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                <span>{review.createdAt?.toDate ? review.createdAt.toDate().toLocaleDateString() : 'Just now'}</span>
+
+                                                {(role === "admin" || auth.currentUser?.uid === review.userId) && (
+                                                    <button
+                                                        onClick={() => handleDelete(review.id)}
+                                                        style={{
+                                                            background: '#ef4444',
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            padding: '4px 8px',
+                                                            borderRadius: '4px',
+                                                            cursor: 'pointer',
+                                                            fontSize: '0.8rem'
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
 
