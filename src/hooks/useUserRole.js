@@ -4,6 +4,7 @@ import { auth, db } from "../firebase/config"; // Adjusted import path to match 
 
 export default function useUserRole() {
     const [role, setRole] = useState(null);
+    const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -22,10 +23,11 @@ export default function useUserRole() {
         // This might fail on refresh if auth isn't ready. 
         // I will improve it slightly to look like this:
 
-        const unsubscribe = auth.onAuthStateChanged(async (user) => {
-            if (user) {
+        const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+            setUser(currentUser);
+            if (currentUser) {
                 try {
-                    const ref = doc(db, "users", user.uid);
+                    const ref = doc(db, "users", currentUser.uid);
                     const snap = await getDoc(ref);
                     if (snap.exists()) {
                         setRole(snap.data().role || "user");
@@ -44,5 +46,5 @@ export default function useUserRole() {
         return () => unsubscribe();
     }, []);
 
-    return { role, loading };
+    return { role, loading, user };
 }

@@ -1,309 +1,249 @@
-import React, { useEffect, useState } from 'react';
-import { Star, Plus, Play, Search } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { rawgApi } from '../services/rawgApi';
 import { isSafeGame } from '../utils/filters';
-
-const API_KEY = import.meta.env.VITE_RAWG_API_KEY;
-
-
+import FeaturedBanner from '../components/FeaturedBanner';
+import FilterBar from '../components/FilterBar';
+import GameGrid from '../components/GameGrid';
+import GameCardSkeleton from '../components/skeletons/GameCardSkeleton';
+import GameQuickView from '../components/GameQuickView';
 
 export default function Browse() {
-    const navigate = useNavigate();
+    // Data State
     const [games, setGames] = useState([]);
+    const [featuredGames, setFeaturedGames] = useState([]);
+    const [genres, setGenres] = useState([]);
+    const [platforms, setPlatforms] = useState([]);
+    const [selectedGame, setSelectedGame] = useState(null);
+
+    // UI State
     const [loading, setLoading] = useState(true);
-    const [recentGames, setRecentGames] = useState([]);
-    const [upcomingGames, setUpcomingGames] = useState([]);
-    const [topRatedGames, setTopRatedGames] = useState([]);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [error, setError] = useState(null);
+    const [viewMode, setViewMode] = useState('grid');
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
 
-    // Helper to format dates YYYY-MM-DD
-    const getDateString = (date) => {
-        return date.toISOString().split('T')[0];
-    };
+    // Filter State
+    const [filters, setFilters] = useState({
+        search: '',
+        genre: '',
+        platform: '',
+        rating: '', // > value
+        year: '',
+        sort: '-added' // default: popularity
+    });
 
+    // Initial Fetch (Metadata + Featured)
     useEffect(() => {
-        // Fetch General Games (Trending sort)
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&page_size=60&ordering=-added`)
-            .then(res => res.json())
-            .then(data => {
-                const mappedGames = data.results
-                    .filter(isSafeGame)
-                    .map(g => ({
-                        id: g.id,
-                        title: g.name,
-                        year: g.released ? g.released.substring(0, 4) : 'N/A',
-                        rating: g.rating,
-                        image: g.background_image,
-                        genres: g.genres ? g.genres.map(gen => gen.name) : []
-                    }));
-                setGames(mappedGames);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error(err);
-                setLoading(false);
-            });
+        const fetchMetadata = async () => {
+            try {
+                // Calculate past 12 months for "Trending Right Now"
+                const today = new Date();
+                const endDate = today.toISOString().split('T')[0];
+                const startDate = new Date(today.setFullYear(today.getFullYear() - 1)).toISOString().split('T')[0];
 
-        // Fetch Recent Releases (Last 2 months for "New")
-        const today = new Date();
-        const twoMonthsAgo = new Date();
-        twoMonthsAgo.setMonth(today.getMonth() - 2);
-        const recentDates = `${getDateString(twoMonthsAgo)},${getDateString(today)}`;
+                const [genresData, platformsData, featuredData] = await Promise.all([
+                    rawgApi.getGenres(),
+                    rawgApi.getPlatforms(),
+                    rawgApi.getGames({ pageSize: 5, ordering: '-added', dates: `${startDate},${endDate}` })
+                ]);
 
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&dates=${recentDates}&ordering=-released&page_size=20`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.results) {
-                    const mappedRecent = data.results
-                        .filter(isSafeGame)
-                        .slice(0, 12)
-                        .map(g => ({
-                            id: g.id,
-                            title: g.name,
-                            year: g.released ? g.released.substring(0, 4) : 'N/A',
-                            rating: g.rating,
-                            image: g.background_image,
-                            genres: g.genres ? g.genres.map(gen => gen.name) : []
-                        }));
-                    setRecentGames(mappedRecent);
+                if (genresData.results) setGenres(genresData.results);
+                if (platformsData.results) setPlatforms(platformsData.results);
+
+                if (featuredData.results && featuredData.results.length > 0) {
+                    // Fetch details for each featured game to get the description
+                    const detailsPromises = featuredData.results.map(g => rawgApi.getGameDetails(g.id));
+                    const detailsResults = await Promise.all(detailsPromises);
+                    setFeaturedGames(detailsResults);
                 }
-            })
-            .catch(err => console.error("Error fetching recent games:", err));
+            } catch (err) {
+                console.error("Failed to fetch metadata:", err);
+            }
+        };
 
-        // Fetch Upcoming Releases (Next 6 months)
-        const nextSixMonths = new Date();
-        nextSixMonths.setMonth(today.getMonth() + 6);
-        const upcomingDates = `${getDateString(today)},${getDateString(nextSixMonths)}`;
-
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&dates=${upcomingDates}&ordering=-added&page_size=20`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.results) {
-                    const mappedUpcoming = data.results
-                        .filter(isSafeGame)
-                        .slice(0, 12)
-                        .map(g => ({
-                            id: g.id,
-                            title: g.name,
-                            year: g.released ? g.released.substring(0, 4) : 'N/A',
-                            rating: g.rating,
-                            image: g.background_image,
-                            genres: g.genres ? g.genres.map(gen => gen.name) : []
-                        }));
-                    setUpcomingGames(mappedUpcoming);
-                }
-            })
-            .catch(err => console.error("Error fetching upcoming games:", err));
-
-        // Fetch Top Rated (Metacritic)
-        fetch(`https://api.rawg.io/api/games?key=${API_KEY}&page_size=40&ordering=-metacritic`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.results) {
-                    const mappedTop = data.results
-                        .filter(isSafeGame)
-                        .slice(0, 24)
-                        .map(g => ({
-                            id: g.id,
-                            title: g.name,
-                            year: g.released ? g.released.substring(0, 4) : 'N/A',
-                            rating: g.rating,
-                            image: g.background_image,
-                            genres: g.genres ? g.genres.map(gen => gen.name) : []
-                        }));
-                    setTopRatedGames(mappedTop);
-                }
-            })
-            .catch(err => console.error("Error fetching top rated games:", err));
-
+        fetchMetadata();
     }, []);
 
-    // Local sections
-    const trending = games.slice(0, 15); // Increased slice for Trending
+    // Main Game Fetch (Resets list on filter change)
+    useEffect(() => {
+        setPage(1);
+        fetchGames(1, true);
+    }, [filters]);
 
-    if (loading) {
-        return (
-            <div className="container" style={{ paddingTop: '100px', textAlign: 'center', minHeight: '100vh' }}>
-                <p style={{ fontSize: '1.5rem', color: 'var(--text-muted)' }}>Loading news...</p>
-            </div>
-        );
-    }
+    // Fetch Games Helper
+    const fetchGames = async (pageNum, reset = false) => {
+        if (reset) setLoading(true);
+        else setLoadingMore(true);
+        setError(null);
 
-    return (
-        <div style={{ paddingTop: '100px', paddingBottom: '100px' }} className="container">
+        try {
+            const data = await rawgApi.getGames({
+                page: pageNum,
+                pageSize: 20,
+                search: filters.search,
+                genres: filters.genre,
+                parent_platforms: filters.platform,
+                ordering: filters.sort,
+                metacritic: filters.rating ? `${filters.rating},100` : ''
+            });
 
-            {/* Header with Search */}
-            <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'end', flexWrap: 'wrap', gap: '20px' }}>
-                <div>
-                    <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>Discover & News</h1>
-                    <p style={{ color: 'var(--text-muted)' }}>Latest releases, trending games, and upcoming hits.</p>
-                </div>
+            const mappedGames = data.results
+                .filter(isSafeGame)
+                .map(g => ({
+                    id: g.id,
+                    title: g.name,
+                    name: g.name,
+                    year: g.released ? g.released.substring(0, 4) : 'N/A',
+                    released: g.released,
+                    rating: g.rating,
+                    image: g.background_image,
+                    background_image: g.background_image,
+                    genres: g.genres ? g.genres.map(gen => gen.name) : [],
+                    parent_platforms: g.parent_platforms,
+                    playtime: g.playtime
+                }));
 
-                {/* Search Bar */}
-                <button
-                    onClick={() => navigate('/search')}
-                    className="btn-primary"
-                    style={{
-                        padding: '12px 24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        fontSize: '1rem',
-                        borderRadius: '50px'
-                    }}
-                >
-                    <Search size={20} />
-                    Search Games
-                </button>
-            </div>
+            if (reset) {
+                setGames(mappedGames);
+            } else {
+                setGames(prev => [...prev, ...mappedGames]);
+            }
 
-            {/* Newly Released - Horizontal Scroll */}
-            <section style={{ marginBottom: '4rem' }}>
-                <SectionHeader title="Newly Released" />
-                <div className="horizontal-scroll" style={{
-                    display: 'flex',
-                    gap: '1.5rem',
-                    overflowX: 'auto',
-                    paddingBottom: '1rem',
-                    scrollSnapType: 'x mandatory'
-                }}>
-                    {recentGames.map(game => (
-                        <GameCard key={`new-${game.id}`} game={game} />
-                    ))}
-                </div>
-            </section>
+            setHasMore(!!data.next);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    };
 
-            {/* Trending Section - Horizontal Scroll */}
-            <section style={{ marginBottom: '4rem' }}>
-                <SectionHeader title="🔥 Trending Right Now" />
-                <div className="horizontal-scroll" style={{
-                    display: 'flex',
-                    gap: '1.5rem',
-                    overflowX: 'auto',
-                    paddingBottom: '1rem',
-                    scrollSnapType: 'x mandatory'
-                }}>
-                    {trending.map(game => (
-                        <GameCard key={game.id} game={game} size="large" />
-                    ))}
-                </div>
-            </section>
+    // Handlers
+    const handleFilterChange = (key, value) => {
+        if (key === 'clear') {
+            setFilters({
+                search: '',
+                genre: '',
+                platform: '',
+                rating: '',
+                year: '',
+                sort: '-added'
+            });
+        } else {
+            setFilters(prev => ({ ...prev, [key]: value }));
+        }
+    };
 
-            {/* Upcoming Section - Horizontal Scroll */}
-            <section style={{ marginBottom: '4rem' }}>
-                <SectionHeader title="📅 Upcoming Releases" />
-                <div className="horizontal-scroll" style={{
-                    display: 'flex',
-                    gap: '1.5rem',
-                    overflowX: 'auto',
-                    paddingBottom: '1rem',
-                    scrollSnapType: 'x mandatory'
-                }}>
-                    {upcomingGames.map(game => (
-                        <GameCard key={`upcoming-${game.id}`} game={game} />
-                    ))}
-                </div>
-            </section>
+    const handleSearch = (term) => {
+        setFilters(prev => ({ ...prev, search: term }));
+    };
 
-            {/* Top Rated - Horizontal Scroll */}
-            <section>
-                <SectionHeader title="Top Rated by Players" />
-                <div className="horizontal-scroll" style={{
-                    display: 'flex',
-                    gap: '1.5rem',
-                    overflowX: 'auto',
-                    paddingBottom: '1rem',
-                    scrollSnapType: 'x mandatory'
-                }}>
-                    {topRatedGames.map(game => (
-                        <GameCard key={`rated-${game.id}`} game={game} size="small" />
-                    ))}
-                </div>
-            </section>
-        </div>
-    );
-}
+    const handleLoadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchGames(nextPage, false);
+    };
 
-function SectionHeader({ title }) {
-    return (
-        <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'baseline',
-            marginBottom: '1rem',
-            borderBottom: '1px solid rgba(255,255,255,0.1)',
-            paddingBottom: '0.5rem'
-        }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '600' }}>{title}</h2>
-            <a href="#" style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>View all</a>
-        </div>
-    );
-}
+    const handleQuickViewEnter = useCallback((game) => {
+        if (window.qvTimeout) clearTimeout(window.qvTimeout);
+        setSelectedGame(game);
+    }, []);
 
-function GameCard({ game, size = 'medium' }) {
-    let width = '160px';
-    if (size === 'large') width = '220px';
-    if (size === 'small') width = '140px';
+    const handleQuickViewLeave = useCallback(() => {
+        window.qvTimeout = setTimeout(() => {
+            setSelectedGame(null);
+        }, 300);
+    }, []);
 
     return (
-        <Link to={`/game/${game.id}`} className="game-card" style={{
-            minWidth: width,
-            scrollSnapAlign: 'start',
-            position: 'relative',
-            display: 'block',
-            color: 'inherit'
-        }}>
-            {/* Cover Image */}
-            <div style={{
-                position: 'relative',
-                aspectRatio: '3/4',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                background: 'var(--bg-card)',
-                marginBottom: '0.75rem',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                transition: 'transform 0.2s'
-            }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-            >
-                <img
-                    src={game.image}
-                    alt={game.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        <div style={{ paddingTop: '80px', paddingBottom: '100px', minHeight: '100vh', background: 'var(--bg-main)' }} className="container">
+
+            {/* Featured Banner */}
+            {featuredGames.length > 0 && <FeaturedBanner games={featuredGames} />}
+
+            {/* Main Content Area */}
+            <div style={{ position: 'relative' }}>
+
+                {/* Header */}
+                <div style={{ marginBottom: '1rem' }}>
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '0.5rem' }}>Discover Games</h1>
+                    <p style={{ color: 'var(--text-muted)' }}>Explore the vast collection of games based on your preferences.</p>
+                </div>
+
+                {/* Filter Bar */}
+                <FilterBar
+                    onSearch={handleSearch}
+                    onFilterChange={handleFilterChange}
+                    genres={genres}
+                    platforms={platforms}
+                    initialFilters={filters}
                 />
-                {/* Overlay Actions */}
-                <div className="card-overlay" style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'rgba(0,0,0,0.6)',
-                    opacity: 0,
-                    transition: 'opacity 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px'
-                }}>
-                    <button className="icon-btn" onClick={(e) => e.preventDefault()}><Plus size={20} /></button>
-                    <button className="icon-btn" onClick={(e) => e.preventDefault()}><Star size={20} /></button>
+
+                {/* Error Banner */}
+                {error && (
+                    <div style={{
+                        padding: '1rem',
+                        marginBottom: '2rem',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid #ef4444',
+                        borderRadius: '8px',
+                        color: '#ef4444'
+                    }}>
+                        Error: {error}
+                    </div>
+                )}
+
+                {/* Game Grid / List */}
+                <div style={{ minHeight: '400px' }}>
+                    {loading && games.length === 0 ? (
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                            gap: '2rem 1.5rem',
+                            justifyItems: 'center'
+                        }}>
+                            {[...Array(12)].map((_, i) => (
+                                <div key={i} className="skeleton-wrapper">
+                                    <GameCardSkeleton />
+                                </div>
+                            ))}
+                        </div>
+                    ) : games.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', fontSize: '1.2rem' }}>
+                            No games found matching your filters.
+                        </div>
+                    ) : (
+                        <GameGrid
+                            games={games}
+                            loading={loadingMore}
+                            viewMode={viewMode}
+                            onViewModeChange={setViewMode}
+                            onLoadMore={handleLoadMore}
+                            hasMore={hasMore}
+                            onQuickViewEnter={handleQuickViewEnter}
+                            onQuickViewLeave={handleQuickViewLeave}
+                        />
+                    )}
                 </div>
+
             </div>
 
-            {/* Info */}
-            <h3 style={{
-                fontSize: size === 'large' ? '1.1rem' : '0.95rem',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                marginBottom: '2px'
-            }}>
-                {game.title}
-            </h3>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                <span>{game.year}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#fbbf24' }}>
-                    <Star size={12} fill="#fbbf24" /> {game.rating}
-                </span>
-            </div>
-        </Link>
+            {/* Quick View Hover Panel */}
+            <GameQuickView
+                game={selectedGame}
+                onMouseEnter={() => {
+                    if (window.qvTimeout) {
+                        clearTimeout(window.qvTimeout);
+                        window.qvTimeout = null;
+                    }
+                }}
+                onMouseLeave={() => {
+                    window.qvTimeout = setTimeout(() => {
+                        setSelectedGame(null);
+                    }, 300);
+                }}
+            />
+        </div>
     );
 }

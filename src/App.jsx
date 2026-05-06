@@ -1,31 +1,38 @@
-import React, { useEffect, useState } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import React, { useEffect, useState, Suspense, lazy } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
-import LandingPage from "./pages/LandingPage";
-import Browse from "./pages/Browse";
 
-import GameDetails from "./pages/GameDetails";
-import Search from "./pages/Search";
-import AdminDashboard from "./pages/AdminDashboard";
+// Lazy load pages
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const Browse = lazy(() => import("./pages/Browse"));
+const GameDetails = lazy(() => import("./pages/GameDetails"));
+const Search = lazy(() => import("./pages/Search"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const Profile = lazy(() => import("./pages/Profile"));
+
 import AdminRoute from "./routes/AdminRoute";
 
 // firebase
 import { auth, db } from "./firebase/config";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 
-import Profile from "./pages/Profile";
+import FloatingBackButton from "./components/FloatingBackButton";
 
 const provider = new GoogleAuthProvider();
 
 function App() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    let unsubscribeSnapshot = null;
+
+    const unsubAuth = onAuthStateChanged(auth, async (u) => {
       if (u) {
         try {
+          // Initial fetch to check for ban status and role
           const userRef = doc(db, "users", u.uid);
           const snap = await getDoc(userRef);
 
@@ -37,24 +44,47 @@ function App() {
               setUser(null);
               return;
             }
-
-            if (userData.role === "admin") {
-              setIsAdmin(true);
-            } else {
-              setIsAdmin(false);
-            }
+            setIsAdmin(userData.role === "admin");
+          } else {
+            // First time login - create default user document
+            const defaultUserData = {
+              email: u.email,
+              displayName: u.displayName || "Anonymous",
+              photoURL: u.photoURL || "",
+              uid: u.uid,
+              role: "user",
+              banned: false,
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(userRef, defaultUserData);
+            setIsAdmin(false);
           }
-          setUser(u);
+
+          // Listen for real-time updates to user data (like photoURL changes)
+          unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              // Merge Auth user with Firestore data
+              setUser({ ...u, ...data });
+              setIsAdmin(data.role === "admin");
+            }
+          });
+
         } catch (error) {
           console.error("Error fetching user data:", error);
-          setUser(u); // Still set user if error, to allow debugging or basic access if acceptable
+          setUser(u);
         }
       } else {
         setUser(null);
         setIsAdmin(false);
+        if (unsubscribeSnapshot) unsubscribeSnapshot();
       }
     });
-    return () => unsub();
+
+    return () => {
+      unsubAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
   }, []);
 
   async function handleGoogleSignIn() {
@@ -69,21 +99,40 @@ function App() {
   async function handleSignOut() {
     try {
       await signOut(auth);
+      navigate("/");
     } catch (err) {
       console.error("Sign out error:", err);
     }
   }
 
   return (
-    <Router>
-      <div className="app-min-h-screen">
-        <Navbar
-          user={user}
-          isAdmin={isAdmin}
-          onSignIn={handleGoogleSignIn}
-          onSignOut={handleSignOut}
-        />
+    <div className="app-min-h-screen">
+      <Navbar
+        user={user}
+        isAdmin={isAdmin}
+        onSignIn={handleGoogleSignIn}
+        onSignOut={handleSignOut}
+      />
 
+      <Suspense fallback={
+        <div style={{ 
+          height: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          background: 'var(--bg-main)',
+          color: 'var(--primary)'
+        }}>
+          <div className="spinner" style={{ 
+            width: '40px', 
+            height: '40px', 
+            border: '3px solid rgba(255,255,255,0.1)', 
+            borderTop: '3px solid var(--primary)', 
+            borderRadius: '50%', 
+            animation: 'spin 1s linear infinite' 
+          }}></div>
+        </div>
+      }>
         <Routes>
           <Route path="/" element={
             <LandingPage user={user} onSignIn={handleGoogleSignIn} />
@@ -99,8 +148,15 @@ function App() {
           <Route path="/profile/:uid" element={<Profile />} />
           {/* Add more routes here later */}
         </Routes>
-      </div>
-    </Router>
+      </Suspense>
+      <FloatingBackButton />
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
   );
 }
 
